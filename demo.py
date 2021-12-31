@@ -11,6 +11,7 @@ from natsort import natsorted
 from glob import glob
 import cv2
 import argparse
+import math
 
 parser = argparse.ArgumentParser(description='Demo MPRNet')
 parser.add_argument('--input_dir', default='./samples/input/',
@@ -65,34 +66,47 @@ model.eval()
 
 img_multiple_of = 8
 
+# settings
+tileSize = 8*100
+overlap = 100
+tileSizeActual = tileSize-overlap
+
 for file_ in files:
-    img = Image.open(file_).convert('RGB')
-    x, y = 2000, 2700
-    w, h = x+8*100, y+8*100
-    img = img.crop((x, y, w, h))
-    input_ = TF.to_tensor(img).unsqueeze(0).cuda()
+    sourceImg = Image.open(file_).convert('RGB')
 
-    # Pad the input if not_multiple_of 8
-    h, w = input_.shape[2], input_.shape[3]
-    H, W = ((h+img_multiple_of)//img_multiple_of) * \
-        img_multiple_of, ((w+img_multiple_of)//img_multiple_of)*img_multiple_of
-    padh = H-h if h % img_multiple_of != 0 else 0
-    padw = W-w if w % img_multiple_of != 0 else 0
-    input_ = F.pad(input_, (0, padw, 0, padh), 'reflect')
+    for y in range(math.ceil(sourceImg.height/tileSizeActual)):
+        for x in range(math.ceil(sourceImg.width/tileSizeActual)):
+            xLoc = x*tileSizeActual
+            yLoc = y*tileSizeActual
 
-    with torch.no_grad():
-        restored = model(input_)
-    restored = restored[0]
-    restored = torch.clamp(restored, 0, 1)
+            w, h = xLoc+tileSize, yLoc+tileSize
+            print(xLoc, yLoc, w, h)
 
-    # Unpad the output
-    restored = restored[:, :, :h, :w]
+            img = sourceImg.crop((xLoc, yLoc, w, h))
+            input_ = TF.to_tensor(img).unsqueeze(0).cuda()
 
-    restored = restored.permute(0, 2, 3, 1).cpu().detach().numpy()
-    restored = img_as_ubyte(restored[0])
+            # Pad the input if not_multiple_of 8
+            h, w = input_.shape[2], input_.shape[3]
+            H, W = ((h+img_multiple_of)//img_multiple_of) * \
+                img_multiple_of, ((w+img_multiple_of) //
+                                  img_multiple_of)*img_multiple_of
+            padh = H-h if h % img_multiple_of != 0 else 0
+            padw = W-w if w % img_multiple_of != 0 else 0
+            input_ = F.pad(input_, (0, padw, 0, padh), 'reflect')
 
-    f = os.path.splitext(os.path.split(file_)[-1])[0]
-    save_img((os.path.join(out_dir, f+'.png')), restored)
+            with torch.no_grad():
+                restored = model(input_)
+            restored = restored[0]
+            restored = torch.clamp(restored, 0, 1)
+
+            # Unpad the output
+            restored = restored[:, :, :h, :w]
+
+            restored = restored.permute(0, 2, 3, 1).cpu().detach().numpy()
+            restored = img_as_ubyte(restored[0])
+
+            f = os.path.splitext(os.path.split(file_)[-1])[0]
+            save_img((os.path.join(out_dir, f+f'-{y}-{x}.png')), restored)
 
 print(f"Files saved at {out_dir}")
 
