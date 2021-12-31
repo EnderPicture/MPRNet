@@ -2,7 +2,9 @@
 *.pyc
 .DS_Store
 
-.input/
-.output/
+input/
+output/
 
-.Denoising/pretrained_models/model_denoising.pth
+Deblurring/pretrained_models/model_deblurring.pth
+Denoising/pretrained_models/model_denoising.pth
+Deraining/pretrained_models/model_deraining.pth
